@@ -68,7 +68,7 @@ with open(str(args.filename)) as f:
     battleInfo = battle_info(f)
 
     # Read the ratings
-    ratings = pd.read_parquet("db.pq")
+    ratings = pd.read_parquet("rankings.pq")
 
     # Parse the datatypes for efficiency
     ratings = ratings.astype({'username': 'str', 'elo':'int16'})
@@ -101,4 +101,4 @@ with open(str(args.filename)) as f:
     if bool(args.d):
         print(ratings)
     else:   
-        ratings.to_parquet("db.pq")
+        ratings.to_parquet("rankings.pq")
