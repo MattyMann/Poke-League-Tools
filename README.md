@@ -1,1 +1,6 @@
-Files for managing the pokemon league
+Files for managing the Pokemon league.
+
+# To use
+## Adding results
+1. Get the HTML file(s) of the battle.
+2. Run ```process.sh```. This will update the ```rankings.pq``` file with any users it hasn't seen before, and calculate new elo ratings.
