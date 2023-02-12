@@ -62,43 +62,77 @@ def battle_info(file) -> dict:
     else:
         return summary
 
-with open(str(args.filename)) as f:
-    
-    # Get the battle info
-    battleInfo = battle_info(f)
+def update_elos( file ):
 
-    # Read the ratings
-    ratings = pd.read_parquet("data/rankings.pq")
+    with open(file) as f:
+        
+        # Get the battle info
+        battleInfo = battle_info(f)
 
-    # Parse the datatypes for efficiency
-    ratings = ratings.astype({'username': 'str', 'elo':'int16'})
+        # Read the ratings
+        ratings = pd.read_parquet("data/rankings.pq")
 
-    # Check if users exists. If not, initialise and add them
-    if ratings.loc[ratings['username'] == battleInfo['player_one']].empty: 
-        ratings.loc[len(ratings)] = [battleInfo['player_one'],1000]
-    if ratings.loc[ratings['username'] == battleInfo['player_two']].empty:
-        ratings.loc[len(ratings)] = [battleInfo['player_two'],1000]
+        # Parse the datatypes for efficiency
+        ratings = ratings.astype({'username': 'string', 'elo':'int16', 'active': 'bool'})
 
-    # Get current elos
-    player_one_elo = ratings[ratings['username'] == battleInfo['player_one']]['elo'].values[0]
+        # Check if users exists. If not, initialise and add them
+        if ratings.loc[ratings['username'] == battleInfo['player_one']].empty: 
+            ratings.loc[len(ratings)] = [battleInfo['player_one'],1000]
+        if ratings.loc[ratings['username'] == battleInfo['player_two']].empty:
+            ratings.loc[len(ratings)] = [battleInfo['player_two'],1000]
 
-    player_two_elo = ratings[ratings['username'] == battleInfo['player_two']]['elo'].values[0]
+        # Get current elos
+        player_one_elo = ratings[ratings['username'] == battleInfo['player_one']]['elo'].values[0]
 
-    # The k_val of the game
-    k_val = 32 * (1 + (abs(battleInfo['n_faint_one'] - battleInfo['n_faint_two'])/6))
+        player_two_elo = ratings[ratings['username'] == battleInfo['player_two']]['elo'].values[0]
 
-    # Calc new elos
-    new_elo_one = elo_calc(player_one_elo,player_two_elo,0.5 if battleInfo['win_draw_status'] == True else ( 1 if battleInfo['player_one'] == battleInfo['win_draw_status'] else 0 ), k_val)
+        # The k_val of the game
+        k_val = 32 * (1 + (abs(battleInfo['n_faint_one'] - battleInfo['n_faint_two'])/6))
 
-    new_elo_two = elo_calc(player_two_elo,player_one_elo,0.5 if battleInfo['win_draw_status'] == True else ( 1 if battleInfo['player_two'] == battleInfo['win_draw_status'] else 0 ), k_val)
+        # Calc new elos
+        new_elo_one = elo_calc(player_one_elo,player_two_elo,0.5 if battleInfo['win_draw_status'] == True else ( 1 if battleInfo['player_one'] == battleInfo['win_draw_status'] else 0 ), k_val)
 
-    # Set new elo
-    ratings.loc[(ratings['username'] == battleInfo['player_one']),'elo'] = new_elo_one
+        new_elo_two = elo_calc(player_two_elo,player_one_elo,0.5 if battleInfo['win_draw_status'] == True else ( 1 if battleInfo['player_two'] == battleInfo['win_draw_status'] else 0 ), k_val)
 
-    ratings.loc[(ratings['username'] == battleInfo['player_two']),'elo'] = new_elo_two
+        # Set new elo
+        ratings.loc[(ratings['username'] == battleInfo['player_one']),'elo'] = new_elo_one
 
-    # Output
-    if bool(args.d):
-        print(ratings)
-    else:   
-        ratings.to_parquet("data/rankings.pq")
+        ratings.loc[(ratings['username'] == battleInfo['player_two']),'elo'] = new_elo_two
+
+        # Output
+        if bool(args.d):
+            print(ratings)
+        else:   
+            ratings.to_parquet("data/rankings.pq")
+
+def update_table(file,table_file):
+
+    with open(file) as f:
+
+        table = pd.read_parquet(table_file)
+
+        table = table.astype({'username': 'string', 'wins': 'int8', 'losses': 'int8', 'draws': 'int8','points':'int8','kills': 'int8', 'faints':'int8', 'k/d': 'int8'})
+
+        battleInfo = battle_info(file)
+
+        match battleInfo['win_draw_status']:
+            case True:
+                table.loc[table['username'] == battleInfo['player_one'],'draws'] += 1
+                table.loc[table['username'] == battleInfo['player_two'],'draws'] += 1
+                table.loc[table['username'] == battleInfo['player_one'],'points'] += 1
+                table.loc[table['username'] == battleInfo['player_two'],'points'] += 1
+            case battleInfo['player_one']:
+                table.loc[table['username'] == battleInfo['player_one'],'wins'] += 1
+                table.loc[table['username'] == battleInfo['player_two'],'losses'] += 1
+                table.loc[table['username'] == battleInfo['player_one'],'points'] += 3
+                table.loc[table['username'] == battleInfo['player_two'],'points'] += 0
+            case battleInfo['player_two']:
+                table.loc[table['username'] == battleInfo['player_one'],'losses'] += 1
+                table.loc[table['username'] == battleInfo['player_two'],'wins'] += 1
+                table.loc[table['username'] == battleInfo['player_one'],'points'] += 0
+                table.loc[table['username'] == battleInfo['player_two'],'points'] += 3
+
+        print(table)
+
+update_elos(str(args.filename)) 
+
