@@ -2,11 +2,12 @@ import pandas as pd
 import math
 import numpy as np
 
-def conventions(rankings) -> list:
+def conventions( rankings ) -> list:
 
+    # Read in the ratings for elo calc
     ratings = pd.read_parquet(rankings)
     
-    ratings = ratings.astype({'username': 'str', 'elo': 'int16', 'active': 'bool'}).sort_values('elo',ascending=False)
+    ratings = ratings.astype({'username': 'string', 'elo': 'int16', 'active': 'bool'}).sort_values('elo',ascending=False)
     
     active_players = ratings[ratings['active'] == True].drop(columns=['elo','active'])
     
@@ -14,7 +15,10 @@ def conventions(rankings) -> list:
     
     active_players = active_players.to_numpy()
     
-    conventions = map(lambda conv: conv.tolist(),np.split(active_players,num_of_conventions))
+    conventions = list(map(lambda conv: conv.tolist(),np.split(active_players,num_of_conventions)))
 
+    for idx, convention in enumerate(conventions):
+        
+        conventions[idx] = list(map(lambda player: player[0],convention))
+        
     return conventions
-    
