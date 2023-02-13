@@ -5,6 +5,7 @@ FILES="*.html"
 for file in $FILES; do
 	python process.py -q $file
 	printf "$file processed\n"
+	mkdir "records"
 	zpaq add "records/GameRecord.zpaq" $file -m5 &> /dev/null
 	printf "$file backed up\n"
 	rm $file

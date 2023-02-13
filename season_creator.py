@@ -6,7 +6,7 @@ from random import shuffle
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('season_num',dtype=int)
+parser.add_argument('season_num',type=int)
 
 args = parser.parse_args()
 
@@ -85,6 +85,7 @@ def matches( convention: list ) -> list:
                     else:
 
                         schedule[nday,ngame+1] = match_list.pop(idx)
+
                         break
 
     return schedule 
@@ -101,8 +102,8 @@ def league_table( convention: list):
 
     return table
 
-for idx, convention in enumerate(conventions(rankings)):
+for idx, convention in enumerate(conventions("data/rankings.pq")):
 
     matches(convention)
-    league = league_table(convetion)
-    league.to_parquet("seasons/season"+str(args.season_num)+"/table_" + idx)
+    league = league_table(convention)
+    league.to_parquet("seasons/season"+str(args.season_num)+"/table_" + str(idx))
