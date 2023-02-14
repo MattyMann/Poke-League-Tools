@@ -5,12 +5,9 @@ from itertools import combinations
 from random import shuffle
 import argparse
 
-parser = argparse.ArgumentParser()
-parser.add_argument('season_num',type=int)
+season_num = 1
 
-args = parser.parse_args()
-
-def conventions( rankings ) -> list:
+def conventions( rankings ) -> dict:
 
     # Read in the ratings for elo calc
     ratings = pd.read_parquet(rankings)
@@ -19,23 +16,47 @@ def conventions( rankings ) -> list:
     
     # Create a new DF with just the active players
     active_players = ratings[ratings['active'] == True].drop(columns=['elo','active'])
+
+    # Convention names, based on Pokeball names
+    convnames = ['Master','Ultra','Great']
     
     # How many conventions should be made? By default we say there should be eight per convention
-    num_of_conventions = math.ceil(len(active_players) / 8)
+    num_of_conventions = min(math.ceil(len(active_players) / 8),len(convnames))
     
     # How many players are 'active', i.e., will be playing this season
     active_players = active_players.to_numpy()
     
     # Create a list of conventions based on elo
-    conventions = list(map(lambda conv: conv.tolist(),np.split(active_players,num_of_conventions)))
+    conventions = dict(zip(convnames,map(lambda conv: conv.tolist(),np.split(active_players,num_of_conventions))))
 
     # Make into lists
-    for idx, convention in enumerate(conventions):
+    for (name,convention) in conventions.items():
         
-        conventions[idx] = list(map(lambda player: player[0],convention))
+        conventions[name] = list(map(lambda player: player[0],convention))
         
     return conventions
 
+def create_league_tables( conventions: dict):
+
+    for (name,convention) in conventions.items():
+
+        table = pd.DataFrame({'username': convention})
+
+        table['wins'],table['losses'],table['draws'],table['points'],table['kills'],table['faints'],table['k/d'] = 0,0,0,0,0,0,0
+        # This should work but is causing issues. It might be more efficient if we can get it to work.
+        # table = table.reindex(columns=['wins','losses','draws','points','kills','faints','k/d'], fill_value=0)
+
+        table = table.astype({'username': 'string', 'wins': 'int8', 'losses': 'int8', 'draws': 'int8','points':'int8','kills': 'int8', 'faints':'int8', 'k/d': 'int8'})
+
+        table = table.sort_values(['points','k/d'])
+        
+        table.to_parquet("seasons/season"+str(season_num)+"/table_" + name)
+
+    with open("seasons/season"+str(season_num)+"/index","a") as f:
+        f.write(str(conventions))
+
+    return
+                        
 def matches( convention: list ) -> list:
 
     # Get the number of players in the convention. If odd, add a 'Day Off' player and make even
@@ -89,21 +110,3 @@ def matches( convention: list ) -> list:
                         break
 
     return schedule 
-
-def league_table( convention: list):
-
-    table = pd.DataFrame({'username': convention})
-
-    table['wins'],table['losses'],table['draws'],table['points'],table['kills'],table['faints'],table['k/d'] = 0,0,0,0,0,0,0
-    
-    table = table.astype({'username': 'string', 'wins': 'int8', 'losses': 'int8', 'draws': 'int8','points':'int8','kills': 'int8', 'faints':'int8', 'k/d': 'int8'})
-
-    table = table.sort_values(['points','k/d'])
-
-    return table
-
-for idx, convention in enumerate(conventions("data/rankings.pq")):
-
-    matches(convention)
-    league = league_table(convention)
-    league.to_parquet("seasons/season"+str(args.season_num)+"/table_" + str(idx))
