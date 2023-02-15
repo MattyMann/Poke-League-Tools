@@ -1,13 +1,13 @@
-import pandas as pd
 import math
-import numpy as np
 from itertools import combinations
 from random import shuffle
+import pandas as pd
+import numpy as np
 import argparse
 
 season_num = 1
 
-def conventions( rankings ) -> dict:
+def create_conventions( rankings ) -> dict:
 
     # Read in the ratings for elo calc
     ratings = pd.read_parquet(rankings)
@@ -55,9 +55,7 @@ def create_league_tables( conventions: dict):
     with open("seasons/season"+str(season_num)+"/index","a") as f:
         f.write(str(conventions))
 
-    return
-                        
-def matches( convention: list ) -> list:
+def create_matches( convention: list ) -> list:
 
     # Get the number of players in the convention. If odd, add a 'Day Off' player and make even
     num_players = len(convention)
@@ -82,7 +80,7 @@ def matches( convention: list ) -> list:
 
     # Could this be done better? Absolutely. Do I have the patience to fix it? No.
 
-    while match_list != []:
+    while match_list:
         # Creates an empty numpy array for this convention's schedule
         schedule = np.empty((num_days,games_per_day,2),dtype='object')
         # Create all matches

@@ -2,8 +2,8 @@ import re
 from ast import literal_eval
 from bs4 import BeautifulSoup
 import pandas as pd
-import numpy as np
 from elo_calc import elo_calc
+import os
 
 def battle_info(filename) -> dict:
     """
@@ -24,8 +24,6 @@ def battle_info(filename) -> dict:
         soup = BeautifulSoup(f, features="html.parser")
 
         # Get players
-        title = soup.title.string
-
         # This isn't a great solution as if Showdown change the format of names, this will fail
         players = list(map(lambda i: i.string, soup.find_all(class_="subtle")))
 
@@ -77,8 +75,8 @@ def update_elos( filename ):
         # Read the ratings
         rankings = pd.read_parquet("data/rankings.pq")
 
-        # Parse the datatypes for efficiency
-        rankings = rankings.astype({'username': 'string', 'elo':'int16', 'active': 'bool'})
+        # # Parse the datatypes for efficiency
+        # rankings = rankings.astype({'username': 'string', 'elo':'int16', 'active': 'bool'})
 
         # Check if users exists. If not, initialise and add them
         if rankings.loc[rankings['username'] == BattleInfo['player_one']].empty: 
@@ -110,8 +108,6 @@ def update_elos( filename ):
         # Write rankings back to file
         rankings.to_parquet("data/rankings.pq")
 
-        return
-
 def update_table(file,season_num: int):
 
     battleInfo = battle_info(file)
@@ -132,9 +128,14 @@ def update_table(file,season_num: int):
             raise Exception(battleInfo['player_one'] + " and " + battleInfo['player_two'] + " are not in the same league")
 
         table_file = "seasons/season"+str(season_num)+"/table_"+rel_league
-        table = pd.read_parquet(table_file)
 
-        table = table.astype({'username': 'string', 'wins': 'int8', 'losses': 'int8', 'draws': 'int8','points':'int8','kills': 'int8', 'faints':'int8', 'k/d': 'int8'})
+        if os.path.isfile(table_file):
+
+            table = pd.read_parquet(table_file)
+        else:
+            table = pd.DataFrame(columns=['username','wins', 'losses', 'draws','points','kills', 'faints', 'k/d'])
+
+            table = table.astype({'username': 'string', 'wins': 'int8', 'losses': 'int8', 'draws': 'int8','points':'int8','kills': 'int8', 'faints':'int8', 'k/d': 'int8'})
 
         match battleInfo['win_draw_status']:
             case 0:
@@ -168,5 +169,3 @@ def update_table(file,season_num: int):
         table.sort_values(by=['points','k/d','kills','faints'],ascending=[False,False,True],inplace=True)
 
         table.to_parquet(table_file)
-
-        return
