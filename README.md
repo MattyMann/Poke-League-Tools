@@ -1,6 +1,14 @@
 Files for managing the Pokemon league.
 
-# To use
-## Adding results
-1. Get the HTML file(s) of the battle.
-2. Run ```process.sh```. This will update the ```rankings.pq``` file with any users it hasn't seen before, and calculate new elo ratings, compressed and tidy the HTML files and store them for archival purposes in ```records/GameRecords.zpaq```.
+# Usage
+To process HTML game files, simply move them into the same directory and run ```process.sh```. This will
+- process the scores;
+- add the results to the league table;
+- update the elo rankings;
+- and archive the matches.
+
+# To Do
+- [ ] Pokemon team & draft storage
+- [x] League table
+- [x] Rankings table
+- [x] HTML file processor
