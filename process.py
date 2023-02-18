@@ -1,11 +1,13 @@
 import re
 from ast import literal_eval
+import os
+import argparse
 from bs4 import BeautifulSoup
 import pandas as pd
 from elo_calc import elo_calc
-import os
+from season_creator import create_conventions
 
-def battle_info(filename) -> dict:
+def battle_info( filename ) -> dict:
     """
     Extracts the relevant information from an HTML battle file
     --------------
@@ -17,8 +19,8 @@ def battle_info(filename) -> dict:
     ------
     summary (dict): a five element dictionary
     """
-    
-    with open(filename,'r') as f:
+
+    with open(filename) as f:
 
         # Parse html file
         soup = BeautifulSoup(f, features="html.parser")
@@ -67,24 +69,21 @@ def update_elos( filename ):
     filename: the HTML file of the match
     -----------
     """
+    # Get the battle info
+    BattleInfo = battle_info(filename)
+
     with open(filename) as f:
-        
-        # Get the battle info
-        BattleInfo = battle_info(f)
 
         # Read the ratings
         rankings = pd.read_parquet("data/rankings.pq")
 
         # # Parse the datatypes for efficiency
-        # rankings = rankings.astype({'username': 'string', 'elo':'int16', 'active': 'bool'})
-
+        rankings = rankings.astype({'username': 'string', 'elo':'int16', 'active': 'bool'})
         # Check if users exists. If not, initialise and add them
-        if rankings.loc[rankings['username'] == BattleInfo['player_one']].empty: 
-            rankings.loc[len(rankings)] = [BattleInfo['player_one'],1000]
-        elif rankings.loc[rankings['username'] == BattleInfo['player_two']].empty:
-            rankings.loc[len(rankings)] = [BattleInfo['player_two'],1000]
-        else:
-            pass
+        if rankings.loc[rankings['username'] == BattleInfo['player_one']].empty or rankings.empty: 
+            rankings.loc[len(rankings)] = [BattleInfo['player_one'],1000,True]
+        if rankings.loc[rankings['username'] == BattleInfo['player_two']].empty or rankings.empty:
+            rankings.loc[len(rankings)] = [BattleInfo['player_two'],1000,True]
 
         # Get current elos
         player_one_elo = rankings[rankings['username'] == BattleInfo['player_one']]['elo'].values[0]
@@ -169,3 +168,13 @@ def update_table(file,season_num: int):
         table.sort_values(by=['points','k/d','kills','faints'],ascending=[False,False,True],inplace=True)
 
         table.to_parquet(table_file)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('html_file')
+
+    args = parser.parse_args()
+
+    update_elos(args.html_file)
+    convs = create_conventions("data/rankings.pq")
+    update_table(args.html_file,1)
