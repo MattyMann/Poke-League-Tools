@@ -1,0 +1,15 @@
+name: Automatically Generate requirements.txt
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Gen requirements.txt
+
+        uses: ryan-rozario/pipreqs-action-cpy@master
+
+        # Put an example of mandatory inputs here
+        #with:
+         # PROJECT_PATH: /  #default is the root of the repository
+          #REQUIREMENT_PATH: project_folder/requirements.txt  #default is requirement.txt in the root of your repository 
