@@ -19,7 +19,6 @@ def battle_info( filename ) -> dict:
     ------
     summary (dict): a five element dictionary
     """
-
     with open(filename) as f:
 
         # Parse html file
@@ -77,8 +76,6 @@ def update_elos( filename ):
         # Read the ratings
         rankings = pd.read_parquet("data/rankings.pq")
 
-        # # Parse the datatypes for efficiency
-        rankings = rankings.astype({'username': 'string', 'elo':'int16', 'active': 'bool'})
         # Check if users exists. If not, initialise and add them
         if rankings.loc[rankings['username'] == BattleInfo['player_one']].empty or rankings.empty: 
             rankings.loc[len(rankings)] = [BattleInfo['player_one'],1000,True]
@@ -92,7 +89,7 @@ def update_elos( filename ):
 
         # The k_val of the game
         # It scales with kill difference in the game, K = 16*(1 + d/6) where d is the difference. Therefore in a perfect sweep, d=6 and K=32; a pyrrhic victory would be d=3 and K=24; and scraping a win would be d=0 and K=16.
-        k_val = 32 * (1 + (abs(BattleInfo['n_faint_one'] - BattleInfo['n_faint_two'])/6))
+        k_val = 16 * (1 + (abs(BattleInfo['n_faint_one'] - BattleInfo['n_faint_two'])/6))
 
         # Calc new elos
         new_elo_one = elo_calc(player_one_elo,player_two_elo,0.5 if BattleInfo['win_draw_status'] == 0 else ( 1 if BattleInfo['win_draw_status'] == 1 else 0 ), k_val)
@@ -104,10 +101,13 @@ def update_elos( filename ):
 
         rankings.loc[(rankings['username'] == BattleInfo['player_two']),'elo'] = new_elo_two
 
+        # Need this to correct for Python not handling 16 bit ints
+        rankings = rankings.astype({'elo': 'int16'})
+
         # Write rankings back to file
         rankings.to_parquet("data/rankings.pq")
 
-def update_table(file,season_num: int):
+def update_table(file, season_num: int):
 
     battleInfo = battle_info(file)
 
@@ -136,22 +136,21 @@ def update_table(file,season_num: int):
 
             table = table.astype({'username': 'string', 'wins': 'int8', 'losses': 'int8', 'draws': 'int8','points':'int8','kills': 'int8', 'faints':'int8', 'k/d': 'int8'})
 
-        match battleInfo['win_draw_status']:
-            case 0:
-                table.loc[table['username'] == battleInfo['player_one'],'draws'] += 1
-                table.loc[table['username'] == battleInfo['player_two'],'draws'] += 1
-                table.loc[table['username'] == battleInfo['player_one'],'points'] += 1
-                table.loc[table['username'] == battleInfo['player_two'],'points'] += 1
-            case 1:
-                table.loc[table['username'] == battleInfo['player_one'],'wins'] += 1
-                table.loc[table['username'] == battleInfo['player_two'],'losses'] += 1
-                table.loc[table['username'] == battleInfo['player_one'],'points'] += 3
-                table.loc[table['username'] == battleInfo['player_two'],'points'] += 0
-            case 2:
-                table.loc[table['username'] == battleInfo['player_one'],'losses'] += 1
-                table.loc[table['username'] == battleInfo['player_two'],'wins'] += 1
-                table.loc[table['username'] == battleInfo['player_one'],'points'] += 0
-                table.loc[table['username'] == battleInfo['player_two'],'points'] += 3
+        if battleInfo['win_draw_status'] == 0:
+            table.loc[table['username'] == battleInfo['player_one'],'draws'] += 1
+            table.loc[table['username'] == battleInfo['player_two'],'draws'] += 1
+            table.loc[table['username'] == battleInfo['player_one'],'points'] += 1
+            table.loc[table['username'] == battleInfo['player_two'],'points'] += 1
+        elif battleInfo['win_draw_status'] ==  1:
+            table.loc[table['username'] == battleInfo['player_one'],'wins'] += 1
+            table.loc[table['username'] == battleInfo['player_two'],'losses'] += 1
+            table.loc[table['username'] == battleInfo['player_one'],'points'] += 3
+            table.loc[table['username'] == battleInfo['player_two'],'points'] += 0
+        elif battleInfo['win_draw_status'] == 2:
+            table.loc[table['username'] == battleInfo['player_one'],'losses'] += 1
+            table.loc[table['username'] == battleInfo['player_two'],'wins'] += 1
+            table.loc[table['username'] == battleInfo['player_one'],'points'] += 0
+            table.loc[table['username'] == battleInfo['player_two'],'points'] += 3
 
         table.loc[table['username'] == battleInfo['player_one'],'kills'] += battleInfo['n_faint_two']
 
