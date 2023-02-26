@@ -38,6 +38,10 @@ def battle_info( filename ) -> dict:
         user_one_faints = len(re.findall('\|faint\|p1a',battle_log))
         user_two_faints = len(re.findall('\|faint\|p2a',battle_log))
 
+        # How to account for revival blessing
+        revival_count_p1 = len(re.findall('Revival Blessing\|p1a',battle_log))
+        revival_count_p2 = len(re.findall('Revival Blessing\|p2a',battle_log))
+
         # Check if a draw occurred. If not, declare a winner
         if tie is None:
 
@@ -53,8 +57,8 @@ def battle_info( filename ) -> dict:
         summary = {
                 "player_one": players[0], #str
                 "player_two": players[1], #str
-                "n_faint_one": user_one_faints, #int
-                "n_faint_two": user_two_faints, #int
+                "n_faint_one": user_one_faints - revival_count_p1, #int
+                "n_faint_two": user_two_faints - revival_count_p2, #int
                 "win_draw_status": 0 if draw else (1 if winner == players[0] else 2) # int
                 } 
 
