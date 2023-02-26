@@ -4,6 +4,7 @@ from random import shuffle
 import pandas as pd
 import numpy as np
 import argparse
+import os
 
 season_num = 1
 
@@ -12,17 +13,20 @@ def create_conventions( rankings ) -> dict:
     # Read in the ratings for elo calc
     ratings = pd.read_parquet(rankings)
     
-    ratings = ratings.astype({'username': 'string', 'elo': 'int16', 'active': 'bool'}).sort_values('elo',ascending=False)
+    ratings = ratings.sort_values('elo',ascending=False)
     
     # Create a new DF with just the active players
     active_players = ratings[ratings['active'] == True].drop(columns=['elo','active'])
+
+    # Number of active players
+    num_active_players = len(active_players)
 
     # Convention names, based on Pokeball names
     convnames = ['Master','Ultra','Great']
     
     # How many conventions should be made? By default we say there should be eight per convention
-    num_of_conventions = min(math.ceil(len(active_players) / 8),len(convnames))
-    
+    num_of_conventions = min(math.ceil(num_active_players / 8),len(convnames))
+
     # How many players are 'active', i.e., will be playing this season
     active_players = active_players.to_numpy()
     
@@ -48,11 +52,13 @@ def create_league_tables( conventions: dict):
 
         table = table.astype({'username': 'string', 'wins': 'int8', 'losses': 'int8', 'draws': 'int8','points':'int8','kills': 'int8', 'faints':'int8', 'k/d': 'int8'})
 
-        table = table.sort_values(['points','k/d'])
+        table = table.sort_values(['points','k/d','wins'])
         
-        table.to_parquet("seasons/season"+str(season_num)+"/table_" + name)
+        os.makedir("seasons/season_"+str(season_num)+"/conference_" + name)
 
-    with open("seasons/season"+str(season_num)+"/index","a") as f:
+        table.to_parquet("seasons/season_"+str(season_num)+"/conference_" + name + "/table")
+
+    with open("seasons/season_"+str(season_num)+"/index","a") as f:
         f.write(str(conventions))
 
 def create_matches( convention: list ) -> list:
@@ -81,8 +87,10 @@ def create_matches( convention: list ) -> list:
     # Could this be done better? Absolutely. Do I have the patience to fix it? No.
 
     while match_list:
+
         # Creates an empty numpy array for this convention's schedule
         schedule = np.empty((num_days,games_per_day,2),dtype='object')
+
         # Create all matches
         match_list = list(combinations(convention,2))
 
