@@ -7,8 +7,15 @@ To process HTML game files, simply move them into the same directory and run ```
 - update the elo rankings;
 - and archive the matches.
 
-# To Do
-- [ ] Pokemon team & draft storage
-- [x] League table
-- [x] Rankings table
-- [x] HTML file processor
+# Roadmap
+## Early to mid 2023
+- [ ] Pokemon team & draft storage inc. cached storage of Pokemon data
+- [ ] Kill tracker on per-Pokemon basis
+
+## Late 2023
+- [ ] ML analysis of mons, players, abilities, etc. to predict winners
+- [ ] Interface for players to easily query aspects of the game inc. schedule, mons, utilities, etc.
+
+## Stretch Goal
+- [ ] Discord bots using this functionality as a backend
+- [ ] GUI
