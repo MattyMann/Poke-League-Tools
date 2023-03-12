@@ -7,7 +7,7 @@ import pandas as pd
 from elo_calc import elo_calc
 from season_creator import create_conventions
 
-def battle_info( filename ) -> dict:
+def battle_info( file ) -> dict:
     """
     Extracts the relevant information from an HTML battle file
     --------------
@@ -19,53 +19,59 @@ def battle_info( filename ) -> dict:
     ------
     summary (dict): a five element dictionary
     """
-    with open(filename) as f:
 
-        # Parse html file
-        soup = BeautifulSoup(f, features="html.parser")
+    # Parse html file
+    soup = BeautifulSoup(file, features="html.parser")
 
-        # Get players
-        # This isn't a great solution as if Showdown change the format of names, this will fail
-        players = list(map(lambda i: i.string, soup.find_all(class_="subtle")))
+    # Get players
+    # This isn't a great solution as if Showdown change the format of names, this will fail
+    players = list(map(lambda i: i.string, soup.find_all(class_="subtle")))
 
-        # Battle info
-        battle_log = soup.find('script',class_='battle-log-data').string
+    # Battle info
+    battle_log = soup.find('script',class_='battle-log-data').string
 
-        # Find any mention of the tie tag, |tie
-        tie = re.search('\|tie\n',battle_log)
+    # Find any mention of the tie tag, |tie
+    tie = re.search('\|tie\n',battle_log)
 
-        # Find the number of faints for each player
-        user_one_faints = len(re.findall('\|faint\|p1a',battle_log))
-        user_two_faints = len(re.findall('\|faint\|p2a',battle_log))
+    # Find the number of faints for each player
+    user_one_faints = len(re.findall('\|faint\|p1a',battle_log))
+    user_two_faints = len(re.findall('\|faint\|p2a',battle_log))
 
-        # How to account for revival blessing
-        revival_count_p1 = len(re.findall('Revival Blessing\|p1a',battle_log))
-        revival_count_p2 = len(re.findall('Revival Blessing\|p2a',battle_log))
+    # How to account for revival blessing
+    revival_count_p1 = len(re.findall('Revival Blessing\|p1a',battle_log))
+    revival_count_p2 = len(re.findall('Revival Blessing\|p2a',battle_log))
 
-        # Check if a draw occurred. If not, declare a winner
-        if tie is None:
+    # times
+    times = re.findall('(?<=\|t:\|)(?>.+)',battle_log)
 
-            winner = re.search('(?<=\|win\|)(?>.+)',battle_log).group(0)
-            
-            draw = False
+    # Check if a draw occurred. If not, declare a winner
+    if tie is None:
 
-        else:
+        winner = re.search('(?<=\|win\|)(?>.+)',battle_log).group(0)
+        
+        draw = False
 
-            draw = True
+    else:
 
-        # summary is the dict that we eventually return. It contains the..., well, summary information about the match.
-        summary = {
-                "player_one": players[0], #str
-                "player_two": players[1], #str
-                "n_faint_one": user_one_faints - revival_count_p1, #int
-                "n_faint_two": user_two_faints - revival_count_p2, #int
-                "win_draw_status": 0 if draw else (1 if winner == players[0] else 2) # int
-                } 
+        draw = True
 
-        return summary
+    # summary is the dict that we eventually return. It contains the..., well, summary information about the match.
+    summary = {
+            "player_one": players[0], #str
+            "player_two": players[1], #str
+            "n_faint_one": user_one_faints - revival_count_p1, #int
+            "n_faint_two": user_two_faints - revival_count_p2, #int
+            "win_draw_status": 0 if draw else (1 if winner == players[0] else 2), # int
+            "start_time": int(times[0]), # int
+            #just for analysis
+            "end_time": int(times[-1]), # int
+            "n_rounds": len(times) # int
+            } 
+
+    return summary
 
 
-def update_elos( filename ):
+def update_elos( file ):
     """
     Updates the elos in the permanent rankings file, data/rankings.pq
     -----------
@@ -73,43 +79,57 @@ def update_elos( filename ):
     -----------
     """
     # Get the battle info
-    BattleInfo = battle_info(filename)
+    BattleInfo = battle_info(file)
 
-    with open(filename) as f:
+    # Read the ratings
+    rankings = pd.read_parquet("data/rankings.pq")
 
-        # Read the ratings
-        rankings = pd.read_parquet("data/rankings.pq")
+    # Check if users exists. If not, initialise and add them
+    for num in ["one","two"]:
+        while 1:
+            if rankings.loc[rankings['username'] == BattleInfo['player_'+num]].empty:
+                idx = input(BattleInfo['player_'+num] + " doesn't exist! Is this an alias for another player? (player_idx/n): ")
+                if idx == "n":
+                    rankings.loc[len(rankings)] = [BattleInfo['player_'+num],1000]
+                    break
+                elif type(idx) == int:
+                    print(rankings['username'])
+                    confirmation = input("You have chosen " + rankings.loc[idx]['username'] + ". Is this correct? (y/n)" )
+                    if confirmation == "y":
+                        rankings.loc[idx]['username'] = BattleInfo['player_'+num] 
+                        break
+                    elif confirmation == "n":
+                        continue
+                else:
+                    print("Invalid input! Please choose a valid option")
+                    continue
+            else:
+                break
 
-        # Check if users exists. If not, initialise and add them
-        if rankings.loc[rankings['username'] == BattleInfo['player_one']].empty or rankings.empty: 
-            rankings.loc[len(rankings)] = [BattleInfo['player_one'],1000,True]
-        if rankings.loc[rankings['username'] == BattleInfo['player_two']].empty or rankings.empty:
-            rankings.loc[len(rankings)] = [BattleInfo['player_two'],1000,True]
+    # Get current elos
+    player_one_elo = rankings[rankings['username'] == BattleInfo['player_one']]['elo'].values[0]
 
-        # Get current elos
-        player_one_elo = rankings[rankings['username'] == BattleInfo['player_one']]['elo'].values[0]
+    player_two_elo = rankings[rankings['username'] == BattleInfo['player_two']]['elo'].values[0]
 
-        player_two_elo = rankings[rankings['username'] == BattleInfo['player_two']]['elo'].values[0]
+    # The k_val of the game
+    # It scales with kill difference in the game, K = 16*(1 + d/6) where d is the difference. Therefore in a perfect sweep, d=6 and K=32; a pyrrhic victory would be d=3 and K=24; and scraping a win would be d=0 and K=16.
+    k_val = 16 * (1 + (abs(BattleInfo['n_faint_one'] - BattleInfo['n_faint_two'])/6))
 
-        # The k_val of the game
-        # It scales with kill difference in the game, K = 16*(1 + d/6) where d is the difference. Therefore in a perfect sweep, d=6 and K=32; a pyrrhic victory would be d=3 and K=24; and scraping a win would be d=0 and K=16.
-        k_val = 16 * (1 + (abs(BattleInfo['n_faint_one'] - BattleInfo['n_faint_two'])/6))
+    # Calc new elos
+    new_elo_one = elo_calc(player_one_elo,player_two_elo,0.5 if BattleInfo['win_draw_status'] == 0 else ( 1 if BattleInfo['win_draw_status'] == 1 else 0 ), k_val)
 
-        # Calc new elos
-        new_elo_one = elo_calc(player_one_elo,player_two_elo,0.5 if BattleInfo['win_draw_status'] == 0 else ( 1 if BattleInfo['win_draw_status'] == 1 else 0 ), k_val)
+    new_elo_two = elo_calc(player_two_elo,player_one_elo,0.5 if BattleInfo['win_draw_status'] == 0 else ( 1 if BattleInfo['win_draw_status'] == 2 else 0 ), k_val)
 
-        new_elo_two = elo_calc(player_two_elo,player_one_elo,0.5 if BattleInfo['win_draw_status'] == 0 else ( 1 if BattleInfo['win_draw_status'] == 2 else 0 ), k_val)
+    # Set new elo
+    rankings.loc[(rankings['username'] == BattleInfo['player_one']),'elo'] = new_elo_one
 
-        # Set new elo
-        rankings.loc[(rankings['username'] == BattleInfo['player_one']),'elo'] = new_elo_one
+    rankings.loc[(rankings['username'] == BattleInfo['player_two']),'elo'] = new_elo_two
 
-        rankings.loc[(rankings['username'] == BattleInfo['player_two']),'elo'] = new_elo_two
+    # Need this to correct for Python not handling 16 bit ints
+    rankings = rankings.astype({'elo': 'int16'})
 
-        # Need this to correct for Python not handling 16 bit ints
-        rankings = rankings.astype({'elo': 'int16'})
-
-        # Write rankings back to file
-        rankings.to_parquet("data/rankings.pq")
+    # Write rankings back to file
+    rankings.to_parquet("data/rankings.pq")
 
 def update_table(file, season_num: int):
 
@@ -178,6 +198,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    update_elos(args.html_file)
-    convs = create_conventions("data/rankings.pq")
-    update_table(args.html_file,1)
+    with open(args.html_file) as file:
+        update_elos(args.html_file)
+        convs = create_conventions("data/rankings.pq")
+        update_table(args.html_file,1)
