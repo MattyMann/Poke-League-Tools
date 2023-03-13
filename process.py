@@ -7,17 +7,17 @@ import pandas as pd
 from elo_calc import elo_calc
 from season_creator import create_conventions
 
-def battle_info( file ) -> dict:
+def summary_data( file ) -> dict:
     """
     Extracts the relevant information from an HTML battle file
     --------------
     Input
     -----
-    filename: the name of the HTML file containing the battle
+    file: the HTML file containing the battle
 
     Output
     ------
-    summary (dict): a five element dictionary
+    summary (dict): a dict containing the key information about the battle
     """
 
     # Parse html file
@@ -44,6 +44,9 @@ def battle_info( file ) -> dict:
     # times
     times = re.findall('(?<=\|t:\|)(?>.+)',battle_log)
 
+    # turns
+    turns = len(re.findall('(?<=\|turn\|)(?>.+)',battle_log))
+
     # Check if a draw occurred. If not, declare a winner
     if tie is None:
 
@@ -65,21 +68,18 @@ def battle_info( file ) -> dict:
             "start_time": int(times[0]), # int
             #just for analysis
             "end_time": int(times[-1]), # int
-            "n_rounds": len(times) # int
+            "n_rounds": turns # int
             } 
 
     return summary
 
-
-def update_elos( file ):
+def update_elos( BattleInfo: dict ):
     """
     Updates the elos in the permanent rankings file, data/rankings.pq
     -----------
-    filename: the HTML file of the match
+    BattleInfo: a dict of the summary info from the summary_data 
     -----------
     """
-    # Get the battle info
-    BattleInfo = battle_info(file)
 
     # Read the ratings
     rankings = pd.read_parquet("data/rankings.pq")
@@ -131,66 +131,66 @@ def update_elos( file ):
     # Write rankings back to file
     rankings.to_parquet("data/rankings.pq")
 
-def update_table(file, season_num: int):
-
-    battleInfo = battle_info(file)
-
-    with open("seasons/season"+str(season_num)+"/index") as indexfile:
-
-        index = literal_eval(indexfile.read())
-        
-        for (name, convention) in index.items():
-            if battleInfo['player_one'] in convention and battleInfo['player_two'] in convention:
-                rel_league = name
-            else:
-                continue
-
-        try:
-            rel_league
-        except:
-            raise Exception(battleInfo['player_one'] + " and " + battleInfo['player_two'] + " are not in the same league")
-
-        table_file = "seasons/season"+str(season_num)+"/table_"+rel_league
-
-        if os.path.isfile(table_file):
-
-            table = pd.read_parquet(table_file)
-        else:
-            table = pd.DataFrame(columns=['username','wins', 'losses', 'draws','points','kills', 'faints', 'k/d'])
-
-            table = table.astype({'username': 'string', 'wins': 'int8', 'losses': 'int8', 'draws': 'int8','points':'int8','kills': 'int8', 'faints':'int8', 'k/d': 'int8'})
-
-        if battleInfo['win_draw_status'] == 0:
-            table.loc[table['username'] == battleInfo['player_one'],'draws'] += 1
-            table.loc[table['username'] == battleInfo['player_two'],'draws'] += 1
-            table.loc[table['username'] == battleInfo['player_one'],'points'] += 1
-            table.loc[table['username'] == battleInfo['player_two'],'points'] += 1
-        elif battleInfo['win_draw_status'] ==  1:
-            table.loc[table['username'] == battleInfo['player_one'],'wins'] += 1
-            table.loc[table['username'] == battleInfo['player_two'],'losses'] += 1
-            table.loc[table['username'] == battleInfo['player_one'],'points'] += 3
-            table.loc[table['username'] == battleInfo['player_two'],'points'] += 0
-        elif battleInfo['win_draw_status'] == 2:
-            table.loc[table['username'] == battleInfo['player_one'],'losses'] += 1
-            table.loc[table['username'] == battleInfo['player_two'],'wins'] += 1
-            table.loc[table['username'] == battleInfo['player_one'],'points'] += 0
-            table.loc[table['username'] == battleInfo['player_two'],'points'] += 3
-
-        table.loc[table['username'] == battleInfo['player_one'],'kills'] += battleInfo['n_faint_two']
-
-        table.loc[table['username'] == battleInfo['player_two'],'kills'] += battleInfo['n_faint_one']
-
-        table.loc[table['username'] == battleInfo['player_one'],'faints'] += battleInfo['n_faint_one']
-
-        table.loc[table['username'] == battleInfo['player_two'],'faints'] += battleInfo['n_faint_two']
-
-        table.loc[table['username'] == battleInfo['player_one'],'k/d'] = table.loc[table['username'] == battleInfo['player_one'],'kills'] - table.loc[table['username'] == battleInfo['player_one'],'faints'] 
-
-        table.loc[table['username'] == battleInfo['player_two'],'k/d'] = table.loc[table['username'] == battleInfo['player_two'],'kills'] - table.loc[table['username'] == battleInfo['player_two'],'faints'] 
-
-        table.sort_values(by=['points','k/d','kills','faints'],ascending=[False,False,True],inplace=True)
-
-        table.to_parquet(table_file)
+# def update_table(file, season_num: int):
+#
+#    battleInfo = summary_data(file)
+#
+#    with open("seasons/season"+str(season_num)+"/index") as indexfile:
+#
+#        index = literal_eval(indexfile.read())
+#        
+#        for (name, convention) in index.items():
+#            if battleInfo['player_one'] in convention and battleInfo['player_two'] in convention:
+#                rel_league = name
+#            else:
+#                continue
+#
+#        try:
+#            rel_league
+#        except:
+#            raise Exception(battleInfo['player_one'] + " and " + battleInfo['player_two'] + " are not in the same league")
+#
+#        table_file = "seasons/season"+str(season_num)+"/table_"+rel_league
+#
+#        if os.path.isfile(table_file):
+#
+#            table = pd.read_parquet(table_file)
+#        else:
+#            table = pd.DataFrame(columns=['username','wins', 'losses', 'draws','points','kills', 'faints', 'k/d'])
+#
+#            table = table.astype({'username': 'string', 'wins': 'int8', 'losses': 'int8', 'draws': 'int8','points':'int8','kills': 'int8', 'faints':'int8', 'k/d': 'int8'})
+#
+#        if battleInfo['win_draw_status'] == 0:
+#            table.loc[table['username'] == battleInfo['player_one'],'draws'] += 1
+#            table.loc[table['username'] == battleInfo['player_two'],'draws'] += 1
+#            table.loc[table['username'] == battleInfo['player_one'],'points'] += 1
+#            table.loc[table['username'] == battleInfo['player_two'],'points'] += 1
+#        elif battleInfo['win_draw_status'] ==  1:
+#            table.loc[table['username'] == battleInfo['player_one'],'wins'] += 1
+#            table.loc[table['username'] == battleInfo['player_two'],'losses'] += 1
+#            table.loc[table['username'] == battleInfo['player_one'],'points'] += 3
+#            table.loc[table['username'] == battleInfo['player_two'],'points'] += 0
+#        elif battleInfo['win_draw_status'] == 2:
+#            table.loc[table['username'] == battleInfo['player_one'],'losses'] += 1
+#            table.loc[table['username'] == battleInfo['player_two'],'wins'] += 1
+#            table.loc[table['username'] == battleInfo['player_one'],'points'] += 0
+#            table.loc[table['username'] == battleInfo['player_two'],'points'] += 3
+#
+#        table.loc[table['username'] == battleInfo['player_one'],'kills'] += battleInfo['n_faint_two']
+#
+#        table.loc[table['username'] == battleInfo['player_two'],'kills'] += battleInfo['n_faint_one']
+#
+#        table.loc[table['username'] == battleInfo['player_one'],'faints'] += battleInfo['n_faint_one']
+#
+#        table.loc[table['username'] == battleInfo['player_two'],'faints'] += battleInfo['n_faint_two']
+#
+#        table.loc[table['username'] == battleInfo['player_one'],'k/d'] = table.loc[table['username'] == battleInfo['player_one'],'kills'] - table.loc[table['username'] == battleInfo['player_one'],'faints'] 
+#
+#        table.loc[table['username'] == battleInfo['player_two'],'k/d'] = table.loc[table['username'] == battleInfo['player_two'],'kills'] - table.loc[table['username'] == battleInfo['player_two'],'faints'] 
+#
+#        table.sort_values(by=['points','k/d','kills','faints'],ascending=[False,False,True],inplace=True)
+#
+#        table.to_parquet(table_file)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -199,6 +199,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     with open(args.html_file) as file:
-        update_elos(args.html_file)
-        convs = create_conventions("data/rankings.pq")
-        update_table(args.html_file,1)
+        summary = summary_date(file)
+        update_elos(summary)
