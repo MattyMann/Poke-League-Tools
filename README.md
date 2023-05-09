@@ -10,7 +10,7 @@ To process HTML game files, simply move them into the same directory and run ```
 # Roadmap
 ## Early to mid 2023
 - [ ] Pokemon team & draft storage inc. cached storage of Pokemon data
-- [ ] Kill tracker on per-Pokemon basis
+- [ ] ~~Kill tracker on per-Pokemon basis~~ The kill tracker is much too difficult for me to implement. Damaging statuses, hazards, and time delayed moves (i.e. future sight), coupled with how Showdown stores the data mean it'd be a pretty hefty task to track kills. I don't think it's *impossible*, but I don't think I am capable of doing it.
 
 ## Late 2023
 - [ ] ML analysis of mons, players, abilities, etc. to predict winners
