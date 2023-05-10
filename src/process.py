@@ -4,8 +4,8 @@ import os
 import argparse
 from bs4 import BeautifulSoup
 import pandas as pd
-from elo_calc import elo_calc
-from season_creator import create_conventions
+from src.elo_calc import elo_calc
+from src.season_creator import create_conventions
 
 def summary_data( file ) -> dict:
     """
@@ -194,10 +194,12 @@ def update_elos( BattleInfo: dict ):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('html_file')
+    parser.add_argument('-htm')
 
     args = parser.parse_args()
 
     with open(args.html_file) as file:
         summary = summary_date(file)
         update_elos(summary)
+
+
