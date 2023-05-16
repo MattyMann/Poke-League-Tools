@@ -2,3 +2,5 @@ env/
 __pycache__/
 records/
 .history/
+src/data/
+test/
