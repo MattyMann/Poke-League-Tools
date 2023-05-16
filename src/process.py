@@ -1,205 +1,272 @@
 import re
-from ast import literal_eval
-import os
+
 import argparse
-from bs4 import BeautifulSoup
-import pandas as pd
-from src.elo_calc import elo_calc
-from src.season_creator import create_conventions
 
-def summary_data( file ) -> dict:
-    """
-    Extracts the relevant information from an HTML battle file
-    --------------
-    Input
-    -----
-    file: the HTML file containing the battle
 
-    Output
-    ------
-    summary (dict): a dict containing the key information about the battle
-    """
 
-    # Parse html file
-    soup = BeautifulSoup(file, features="html.parser")
+TERRAIN_MOVES = [
+    'Stealth Rock',
+    'Spikes',
+    'Toxic Spikes',
+    'Sticky Web',
+]
 
-    # Get players
-    # This isn't a great solution as if Showdown change the format of names, this will fail
-    players = list(map(lambda i: i.string, soup.find_all(class_="subtle")))
-
-    # Battle info
-    battle_log = soup.find('script',class_='battle-log-data').string
-
-    # Find any mention of the tie tag, |tie
-    tie = re.search('\|tie\n',battle_log)
-
-    # Find the number of faints for each player
-    user_one_faints = len(re.findall('\|faint\|p1a',battle_log))
-    user_two_faints = len(re.findall('\|faint\|p2a',battle_log))
-
-    # How to account for revival blessing
-    revival_count_p1 = len(re.findall('Revival Blessing\|p1a',battle_log))
-    revival_count_p2 = len(re.findall('Revival Blessing\|p2a',battle_log))
-
-    # times
-    times = re.findall('(?<=\|t:\|)(?>.+)',battle_log)
-
-    # turns
-    turns = len(re.findall('(?<=\|turn\|)(?>.+)',battle_log))
-
-    # Check if a draw occurred. If not, declare a winner
-    if tie is None:
-
-        winner = re.search('(?<=\|win\|)(?>.+)',battle_log).group(0)
+STATUS_CONDITIONS = [
+    'brn',
+    'par',
+    'psn',
+    'tox',
+    'slp',
+    'frz',
+]
+ 
+# battle processer with the name with the intials HP
+class HitProcessor(object):
+    # class to keep track of different meta data which can be useful
+    def __init__(self, name, hp) -> None:
+        pass
         
-        draw = False
 
-    else:
+class Playerprocessor(object):
+    def __init__(self) -> None:
+        self.__p1_dictamon = {}
+        self.__p2_dictamon = {}
+    
 
-        draw = True
+    def __repr__(self) -> str:
+        return f"Playerprocessor({self.__p1}, {self.__p2})"
 
-    # summary is the dict that we eventually return. It contains the..., well, summary information about the match.
-    summary = {
-            "player_one": players[0], #str
-            "player_two": players[1], #str
-            "n_faint_one": user_one_faints - revival_count_p1, #int
-            "n_faint_two": user_two_faints - revival_count_p2, #int
-            "win_draw_status": 0 if draw else (1 if winner == players[0] else 2), # int
-            "start_time": int(times[0]), # int
-            #just for analysis
-            "end_time": int(times[-1]), # int
-            "n_rounds": turns # int
-            } 
+    @property
+    def p1(self):
+        return self.__p1
+    
+    @p1.setter
+    def p1(self, player):
+        self.__p1 = player
 
-    return summary
+    @property
+    def p2(self):
+        return self.__p2
+    
+    @p2.setter
+    def p2(self, player):
+        self.__p2 = player
 
-def update_elos( BattleInfo: dict ):
-    """
-    Updates the elos in the permanent rankings file, data/rankings.pq
-    -----------
-    BattleInfo: a dict of the summary info from the summary_data 
-    -----------
-    """
+    @property
+    def pokemon(self, p1=False, p2=False):
+        if p1:
+            return self.__p1_dictamon
+        elif p2:
+            return self.__p2_dictamon
+        else:
+            return self.__p1_dictamon, self.__p2_dictamon
+        
+    
+    def add_pokemon(self, poke, p1=False, p2=False):
+        if not p1 and not p2:
+            raise ValueError("Need to specify which player to set")
+        if p1:
+            d = self.__p1_dictamon
+            
+        if p2:
+            d = self.__p2_dictamon
+    
+        d[poke] = {
+            'kills': 0,
+            'killed_by': None,
+            'status': None,
+            'status_causer': None,
+            'hp': 100,
+        }
+    
+    def update_pokemon(self, poke, key, value, p1=False, p2=False):
+        if not p1 and not p2:
+            raise ValueError("Need to specify which player to set")
+        if p1:
+            d = self.__p1_dictamon
+            
+        if p2:
+            d = self.__p2_dictamon
 
-    # Read the ratings
-    rankings = pd.read_parquet("data/rankings.pq")
+        d[poke][key] = value
 
-    # Check if users exists. If not, initialise and add them
-    for num in ["one","two"]:
-        while 1:
-            if rankings.loc[rankings['username'] == BattleInfo['player_'+num]].empty:
-                idx = input(BattleInfo['player_'+num] + " doesn't exist! Is this an alias for another player? (player_idx/n): ")
-                if idx == "n":
-                    rankings.loc[len(rankings)] = [BattleInfo['player_'+num],1000]
-                    break
-                elif type(idx) == int:
-                    print(rankings['username'])
-                    confirmation = input("You have chosen " + rankings.loc[idx]['username'] + ". Is this correct? (y/n)" )
-                    if confirmation == "y":
-                        rankings.loc[idx]['username'] = BattleInfo['player_'+num] 
-                        break
-                    elif confirmation == "n":
-                        continue
-                else:
-                    print("Invalid input! Please choose a valid option")
-                    continue
+    def p1_dict_getter(self):
+        # temp functions to call them
+        return self.__p1_dictamon
+
+    def p2_dict_getter(self):
+        return self.__p2_dictamon
+
+
+class TinaTurner(object):
+
+    def __init__(self, turns) -> None:
+        self.turn_details = {
+            'p1poke': None,
+            'p2poke': None,
+            'p1terrain': None,
+            'p2terrain': None,
+            'p1hp': None,
+            'p2hp': None,
+            'p1status_causer': None,
+            'p2status_causer': None,
+            'p1activate_causer': None,
+            'p2activate_causer': None,
+
+        }
+        for turn in turns:
+            player = self.player(turn)
+            
+            if turn.startswith('|-damage|') and player:
+                self.damage(turn, player)
+                
+            elif turn.startswith('|move|') and player:
+                self.terrain_check(turn, player)
+                self.pokemons(turn)
+            
+            elif turn.startswith('|-status|') and player:
+                self.status_setter(player)
+
+            elif turn.startswith('|-activate|') and player:
+                self.activate_setter(player)
+                # this is for damage from status conditions
+
+            elif turn.startswith('|-heal|') and player:
+                print(turn)
+                self.damage(turn, player)
+
+
+    def status_setter(self, player):
+        if player == "p1":
+            key = 'p1status_causer'
+            player = 'p2'
+        else:
+            key = 'p2status_causer'
+            player = 'p1'
+        
+        self.turn_details[key] = self.turn_details[player + 'poke']
+
+    def activate_setter(self, player):
+        if player == "p1":
+            key = 'p1activate_causer'
+            player = 'p2'
+        else:
+            key = 'p2activate_causer'
+            player = 'p1'
+        
+        self.turn_details[key] = self.turn_details[player + 'poke']
+
+    
+    def damage(self, turn, player):
+        # 78\\/100 this is the damage # want to get the first number
+
+        damage = re.compile(r'\d+\\/100')
+        fnt = re.compile(r'fnt')
+        if damage.search(turn):
+            damage = damage.search(turn).group()[:-5]
+            if player == "p1":
+                self.turn_details['p1hp'] = damage
             else:
-                break
+                self.turn_details['p2hp'] = damage
+        elif fnt.search(turn):
+            if player == "p1":
+                self.turn_details['p1hp'] = 0
+            else:
+                self.turn_details['p2hp'] = 0
 
-    # Get current elos
-    player_one_elo = rankings[rankings['username'] == BattleInfo['player_one']]['elo'].values[0]
+    
+    def terrain_check(self, turn, player):
+        if not turn.split('|')[3] in TERRAIN_MOVES:
 
-    player_two_elo = rankings[rankings['username'] == BattleInfo['player_two']]['elo'].values[0]
+            return False
+        
+        if player == "p1":
+            self.turn_details['p1terrain'] = turn.split('|')[3]
+        else:
+            self.turn_details['p2terrain'] = turn.split('|')[3]
 
-    # The k_val of the game
-    # It scales with kill difference in the game, K = 16*(1 + d/6) where d is the difference. Therefore in a perfect sweep, d=6 and K=32; a pyrrhic victory would be d=3 and K=24; and scraping a win would be d=0 and K=16.
-    k_val = 16 * (1 + (abs(BattleInfo['n_faint_one'] - BattleInfo['n_faint_two'])/6))
+    def pokemons(self, turn):
+        # re compile this |move|p2a: Dragonite|Fire Spin|p1a: Drifblim to get both Dragonite and Drifblim
+        
 
-    # Calc new elos
-    new_elo_one = elo_calc(player_one_elo,player_two_elo,0.5 if BattleInfo['win_draw_status'] == 0 else ( 1 if BattleInfo['win_draw_status'] == 1 else 0 ), k_val)
+        pokemon_search = re.compile(r'p[1-2]a: [A-Za-z]+')
+        pokemons = pokemon_search.findall(turn)
+        if pokemons:
+            for pokemon in pokemons:
+                if pokemon.startswith('p1'):
+                    self.turn_details['p1poke'] = pokemon.split(' ')[-1]
+                else:
+                    self.turn_details['p2poke'] = pokemon.split(' ')[-1]
 
-    new_elo_two = elo_calc(player_two_elo,player_one_elo,0.5 if BattleInfo['win_draw_status'] == 0 else ( 1 if BattleInfo['win_draw_status'] == 2 else 0 ), k_val)
 
-    # Set new elo
-    rankings.loc[(rankings['username'] == BattleInfo['player_one']),'elo'] = new_elo_one
+        # pokemon = turn.split('|')[2].split(' ')[-1]
+        # self.turn_details[key] = pokemon
 
-    rankings.loc[(rankings['username'] == BattleInfo['player_two']),'elo'] = new_elo_two
+            
 
-    # Need this to correct for Python not handling 16 bit ints
-    rankings = rankings.astype({'elo': 'int16'})
+    def player(self, turn):
+        player_search = re.compile(r'p[1-2]a')
+        turn = "|".join(turn.split('|')[:3])
+        if player_search.search(turn):
+            return player_search.search(turn).group()[:-1]
+        else:
+            return None
 
-    # Write rankings back to file
-    rankings.to_parquet("data/rankings.pq")
-
-# def update_table(file, season_num: int):
-#
-#    battleInfo = summary_data(file)
-#
-#    with open("seasons/season"+str(season_num)+"/index") as indexfile:
-#
-#        index = literal_eval(indexfile.read())
-#        
-#        for (name, convention) in index.items():
-#            if battleInfo['player_one'] in convention and battleInfo['player_two'] in convention:
-#                rel_league = name
-#            else:
-#                continue
-#
-#        try:
-#            rel_league
-#        except:
-#            raise Exception(battleInfo['player_one'] + " and " + battleInfo['player_two'] + " are not in the same league")
-#
-#        table_file = "seasons/season"+str(season_num)+"/table_"+rel_league
-#
-#        if os.path.isfile(table_file):
-#
-#            table = pd.read_parquet(table_file)
-#        else:
-#            table = pd.DataFrame(columns=['username','wins', 'losses', 'draws','points','kills', 'faints', 'k/d'])
-#
-#            table = table.astype({'username': 'string', 'wins': 'int8', 'losses': 'int8', 'draws': 'int8','points':'int8','kills': 'int8', 'faints':'int8', 'k/d': 'int8'})
-#
-#        if battleInfo['win_draw_status'] == 0:
-#            table.loc[table['username'] == battleInfo['player_one'],'draws'] += 1
-#            table.loc[table['username'] == battleInfo['player_two'],'draws'] += 1
-#            table.loc[table['username'] == battleInfo['player_one'],'points'] += 1
-#            table.loc[table['username'] == battleInfo['player_two'],'points'] += 1
-#        elif battleInfo['win_draw_status'] ==  1:
-#            table.loc[table['username'] == battleInfo['player_one'],'wins'] += 1
-#            table.loc[table['username'] == battleInfo['player_two'],'losses'] += 1
-#            table.loc[table['username'] == battleInfo['player_one'],'points'] += 3
-#            table.loc[table['username'] == battleInfo['player_two'],'points'] += 0
-#        elif battleInfo['win_draw_status'] == 2:
-#            table.loc[table['username'] == battleInfo['player_one'],'losses'] += 1
-#            table.loc[table['username'] == battleInfo['player_two'],'wins'] += 1
-#            table.loc[table['username'] == battleInfo['player_one'],'points'] += 0
-#            table.loc[table['username'] == battleInfo['player_two'],'points'] += 3
-#
-#        table.loc[table['username'] == battleInfo['player_one'],'kills'] += battleInfo['n_faint_two']
-#
-#        table.loc[table['username'] == battleInfo['player_two'],'kills'] += battleInfo['n_faint_one']
-#
-#        table.loc[table['username'] == battleInfo['player_one'],'faints'] += battleInfo['n_faint_one']
-#
-#        table.loc[table['username'] == battleInfo['player_two'],'faints'] += battleInfo['n_faint_two']
-#
-#        table.loc[table['username'] == battleInfo['player_one'],'k/d'] = table.loc[table['username'] == battleInfo['player_one'],'kills'] - table.loc[table['username'] == battleInfo['player_one'],'faints'] 
-#
-#        table.loc[table['username'] == battleInfo['player_two'],'k/d'] = table.loc[table['username'] == battleInfo['player_two'],'kills'] - table.loc[table['username'] == battleInfo['player_two'],'faints'] 
-#
-#        table.sort_values(by=['points','k/d','kills','faints'],ascending=[False,False,True],inplace=True)
-#
-#        table.to_parquet(table_file)
+    
+def deliner(txt_file):
+        with open(txt_file) as file:
+            return [line.strip() for line in file.readlines()]
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-htm')
+    parser.add_argument('--html')
 
     args = parser.parse_args()
 
-    with open(args.html_file) as file:
-        summary = summary_date(file)
-        update_elos(summary)
+    lines = deliner(args.html)
+    
+    turn, turns, start = [], [], False
+
+    pp = Playerprocessor()
+    for line in lines:
+        if line.startswith("|player|"):
+            # gets player information
+            if line.split('|')[2] == "p1":
+                p1 = line.split('|')[3]
+                pp.p1 = p1
+            else:
+                p2 = line.split('|')[3]
+                pp.p2 = p2
+            
+        
+        if line.startswith("|poke|"):  
+            poke = line.split('|')[3]
+            poke = " ".join(poke.split(' ')[:-1]) \
+                if len(poke.split(' ')) > 1 else poke.split(' ')[0] # double check
+            # gets pokemon information
+            if line.split('|')[2] == "p1":
+                
+                pp.add_pokemon(poke, p1=True)
+            else:
+                pp.add_pokemon(poke, p2=True)
+
+        elif line.startswith(("|turn|","|win|")):
+            # starts the turn logic
+            
+            start = True 
+            if turns:
+                tt = TinaTurner(turns)
+                
+                print(tt.turn_details)
+            turns = []
+        if not start:
+            continue
+        
+
+        turns.append(line)
+
+    # print(turns[2])
+    # print(pp.p1_dict_getter())
+
 
 
