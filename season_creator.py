@@ -1,5 +1,7 @@
 import math
+import random
 from itertools import combinations
+import more_itertools
 from random import shuffle
 import pandas as pd
 import numpy as np
@@ -8,111 +10,93 @@ import os
 
 season_num = 1
 
-def create_conventions( rankings ) -> dict:
+#CoachDsicords can be a 1 column csv of the coaches in this season, 
+#it will search the coachdata.csv for relevant info 
+ 
+Numweeks = 8
+NumPlayoffs = 4
 
-    # Read in the ratings for elo calc
-    ratings = pd.read_parquet(rankings)
-    
-    ratings = ratings.sort_values('elo',ascending=False)
-    
-    # Create a new DF with just the active players
-    active_players = ratings[ratings['active'] == True].drop(columns=['elo','active'])
 
-    # Number of active players
-    num_active_players = len(active_players)
+def create_conferences(CoachDiscords):
 
-    # Convention names, based on Pokeball names
-    convnames = ['Master','Ultra','Great']
+    #load in coachdata, shuffle, and remake into a pd dataframe
+    Coaches = pd.read_csv(CoachDiscords)
+    Coaches = Coaches.values.tolist()
+    random.shuffle(Coaches)
+    Coaches = pd.DataFrame(Coaches)
+    print(Coaches)
+    NumCoaches = len(Coaches)
     
-    # How many conventions should be made? By default we say there should be eight per convention
-    num_of_conventions = min(math.ceil(num_active_players / 8),len(convnames))
-
-    # How many players are 'active', i.e., will be playing this season
-    active_players = active_players.to_numpy()
     
+    
+    # sets the number of conferences must be a nicer way of doing this logic, this works for up to 30 players
+    NumConfs = 0
+    if NumCoaches < 16:
+        NumConfs = 1
+    elif NumCoaches % 3 == 0 & NumCoaches % 2 == 0:
+        NumConfs = 3
+    elif NumCoaches % 2 == 0:
+        NumConfs = 2
+    else: 
+        NumConfs = 1        
+    
+    
+    # Conference names, based on Jack's twisted preferences
+    convnames = ['space','sky','shore']
+       
     # Create a list of conventions based on elo
-    conventions = dict(zip(convnames,map(lambda conv: conv.tolist(),np.split(active_players,num_of_conventions))))
-
+    conferences = dict(zip(convnames,map(lambda conv: conv.values.tolist(),np.split(Coaches,NumConfs))))
+            
     # Make into lists
-    for (name,convention) in conventions.items():
+    for (name,conference) in conferences.items():
         
-        conventions[name] = list(map(lambda player: player[0],convention))
+        conferences[name] = list(map(lambda player: player[0],conference))
         
-    return conventions
+    return conferences
 
-def create_league_tables( conventions: dict):
+#create the league tables 
+def create_league_tables(conferences: dict):
+    os.mkdir(r'C:\Users\matth\OneDrive\Documents\Github\Poke-League-Tools\season_'+str(season_num))
+    for (name,conference) in conferences.items():
+        table = pd.DataFrame({'team': conference})
 
-    for (name,convention) in conventions.items():
-
-        table = pd.DataFrame({'username': convention})
-
-        table['wins'],table['losses'],table['draws'],table['points'],table['kills'],table['faints'],table['k/d'] = 0,0,0,0,0,0,0
+        table['played'],table['wins'],table['losses'],table['draws'],table['points'],table['KOs'],table['faints'],table['k/d'] = 0,0,0,0,0,0,0,0
         # This should work but is causing issues. It might be more efficient if we can get it to work.
         # table = table.reindex(columns=['wins','losses','draws','points','kills','faints','k/d'], fill_value=0)
 
-        table = table.astype({'username': 'string', 'wins': 'int8', 'losses': 'int8', 'draws': 'int8','points':'int8','kills': 'int8', 'faints':'int8', 'k/d': 'int8'})
+        table = table.astype({'team': 'string', 'wins': 'int8', 'losses': 'int8', 'draws': 'int8','points':'int8','KOs': 'int8', 'faints':'int8', 'k/d': 'int8'})
 
         table = table.sort_values(['points','k/d','wins'])
-        
-        os.makedir("seasons/season_"+str(season_num)+"/conference_" + name)
+        os.mkdir(r'C:\Users\matth\OneDrive\Documents\Github\Poke-League-Tools\season_'+str(season_num)+'\conference'+name)
+        table.to_csv(r'C:\Users\matth\OneDrive\Documents\Github\Poke-League-Tools\season_'+str(season_num)+'\conference'+name+'/table.csv', index=False)
 
-        table.to_parquet("seasons/season_"+str(season_num)+"/conference_" + name + "/table")
+    with open(r'C:\Users\matth\OneDrive\Documents\Github\Poke-League-Tools\season_'+str(season_num)+'\conference_'+name+'\table.csv', 'w') as f:
+        f.write(str(conferences))
+        f.close()
 
-    with open("seasons/season_"+str(season_num)+"/index","a") as f:
-        f.write(str(conventions))
+def create_matches(NumWeeks, NumPlayoffs, conference: list  ) -> list:
+teams = [] #forogt which variable stores teams
+if len(teams) % 2:
+    teams.append('Day off')
+n = len(teams)
+matchs = []
+fixtures = []
+return_matchs = []
+for fixture in range(1, n):
+    for i in range(n/2):
+        matchs.append((teams[i], teams[n - 1 - i]))
+        return_matchs.append((teams[n - 1 - i], teams[i]))
+    teams.insert(1, teams.pop())
+    fixtures.insert(len(fixtures)/2, matchs)
+    fixtures.append(return_matchs)
+    matchs = []
+    return_matchs = []
 
-def create_matches( convention: list ) -> list:
-
-    # Get the number of players in the convention. If odd, add a 'Day Off' player and make even
-    num_players = len(convention)
-
-    if num_players % 2:
-        convention.append('Day Off')
-        num_players += 1
-
-    # Number of days the tournament must last
-    num_days = num_players - 1
-
-    # Number of games per day
-    games_per_day = num_players // 2
-
-    # Create all matches
-    match_list = list(combinations(convention,2))
-
-    # Shuffle the matches
-    shuffle(match_list)
-
-    # This logic makes me want to die. It makes sure players only appear once each day, and all matches are used up (all matches occur)
-
-    # Could this be done better? Absolutely. Do I have the patience to fix it? No.
-
-    while match_list:
-
-        # Creates an empty numpy array for this convention's schedule
-        schedule = np.empty((num_days,games_per_day,2),dtype='object')
-
-        # Create all matches
-        match_list = list(combinations(convention,2))
-
-        # Shuffle the matches
-        shuffle(match_list)
-
-        for nday, day in enumerate(schedule):
-
-            schedule[nday,0] = match_list.pop()
-
-            for ngame in range(games_per_day - 1):
-
-                for idx, match in enumerate(match_list):
-                    
-                    if match[0] in day or match[1] in day:
-
-                        continue 
-
-                    else:
-
-                        schedule[nday,ngame+1] = match_list.pop(idx)
-
-                        break
-
+for fixture in fixtures:
+    print fixture
     return schedule 
+
+#testing 
+life = create_conferences(r"C:\Users\matth\OneDrive\Documents\abc.csv")
+rebirth = create_matches(8,4,life)
+print(rebirth)
