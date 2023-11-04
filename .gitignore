@@ -1,3 +1,6 @@
 env/
 __pycache__/
 records/
+/.idea
+/hidden.env
+/old_code.txt
