@@ -2,7 +2,6 @@ __Author__ = "Luc Elliott"
 __Version__ = "1.0.0"
 
 
-
 class PokemonError(Exception):
     # class which handles pokemon errors
     def __init__(self, message):
@@ -21,8 +20,3 @@ class PlayerError(Exception):
 
     def __str__(self):
         return f"{self.message}"
-
-
-# create a custom warning that doesn't exit the program
-
-
